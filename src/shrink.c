@@ -23,7 +23,7 @@
 /*
  * Uses the libdivsufsort library Copyright (c) 2003-2008 Yuta Mori
  *
- * Inspired by cap by Sven-Åke Dahl. https://github.com/svendahl/cap
+ * Inspired by cap by Sven-ï¿½ke Dahl. https://github.com/svendahl/cap
  * Also inspired by Charles Bloom's compression blog. http://cbloomrants.blogspot.com/
  * With ideas from LZ4 by Yann Collet. https://github.com/lz4/lz4
  * With help and support from spke <zxintrospec@gmail.com>
@@ -32,7 +32,25 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <stdint.h>
 #include <limits.h>
+
+/* Unaligned fixed-size comparison helpers â€” avoid memcmp call overhead */
+static inline int apultra_cmp2(const unsigned char *a, const unsigned char *b) {
+   uint16_t va, vb;
+   memcpy(&va, a, 2); memcpy(&vb, b, 2);
+   return va == vb;
+}
+static inline int apultra_cmp4(const unsigned char *a, const unsigned char *b) {
+   uint32_t va, vb;
+   memcpy(&va, a, 4); memcpy(&vb, b, 4);
+   return va == vb;
+}
+static inline int apultra_cmp8(const unsigned char *a, const unsigned char *b) {
+   uint64_t va, vb;
+   memcpy(&va, a, 8); memcpy(&vb, b, 8);
+   return va == vb;
+}
 #include "libapultra.h"
 #include "matchfinder.h"
 #include "shrink.h"
@@ -214,7 +232,7 @@ static void apultra_insert_forward_match(apultra_compressor *pCompressor, const 
                   if (nRepPos >= nMatchOffset) {
                      const unsigned char* pInWindowStart = pInWindow + nRepPos;
 
-                     if (!memcmp(pInWindowStart, pInWindowStart - nMatchOffset, 2)) {
+                     if (apultra_cmp2(pInWindowStart, pInWindowStart - nMatchOffset)) {
                         if (nRepOffset) {
                            const int nLen0 = rle_len[nRepPos - nMatchOffset];
                            const int nLen1 = rle_len[nRepPos];
@@ -230,9 +248,9 @@ static void apultra_insert_forward_match(apultra_compressor *pCompressor, const 
                            if (pInWindowAtRepOffset > pInWindowMax)
                               pInWindowAtRepOffset = pInWindowMax;
 
-                           while ((pInWindowAtRepOffset + 8) < pInWindowMax && !memcmp(pInWindowAtRepOffset, pInWindowAtRepOffset - nMatchOffset, 8))
+                           while ((pInWindowAtRepOffset + 8) < pInWindowMax && apultra_cmp8(pInWindowAtRepOffset, pInWindowAtRepOffset - nMatchOffset))
                               pInWindowAtRepOffset += 8;
-                           while ((pInWindowAtRepOffset + 4) < pInWindowMax && !memcmp(pInWindowAtRepOffset, pInWindowAtRepOffset - nMatchOffset, 4))
+                           while ((pInWindowAtRepOffset + 4) < pInWindowMax && apultra_cmp4(pInWindowAtRepOffset, pInWindowAtRepOffset - nMatchOffset))
                               pInWindowAtRepOffset += 4;
                            while (pInWindowAtRepOffset < pInWindowMax && pInWindowAtRepOffset[0] == pInWindowAtRepOffset[-nMatchOffset])
                               pInWindowAtRepOffset++;
@@ -439,7 +457,7 @@ static void apultra_optimize_forward(apultra_compressor *pCompressor, const unsi
                const int nRepOffset = cur_arrival[j].rep_offset;
 
                if (i >= nRepOffset) {
-                  if (!memcmp(pInWindowStart, pInWindowStart - nRepOffset, 2)) {
+                  if (apultra_cmp2(pInWindowStart, pInWindowStart - nRepOffset)) {
                      if (nRepOffset) {
                         const int nLen0 = rle_len[i - nRepOffset];
                         const int nLen1 = rle_len[i];
@@ -449,9 +467,9 @@ static void apultra_optimize_forward(apultra_compressor *pCompressor, const unsi
                         if (pInWindowAtRepOffset > pInWindowMax)
                            pInWindowAtRepOffset = pInWindowMax;
 
-                        while ((pInWindowAtRepOffset + 8) < pInWindowMax && !memcmp(pInWindowAtRepOffset, pInWindowAtRepOffset - nRepOffset, 8))
+                        while ((pInWindowAtRepOffset + 8) < pInWindowMax && apultra_cmp8(pInWindowAtRepOffset, pInWindowAtRepOffset - nRepOffset))
                            pInWindowAtRepOffset += 8;
-                        while ((pInWindowAtRepOffset + 4) < pInWindowMax && !memcmp(pInWindowAtRepOffset, pInWindowAtRepOffset - nRepOffset, 4))
+                        while ((pInWindowAtRepOffset + 4) < pInWindowMax && apultra_cmp4(pInWindowAtRepOffset, pInWindowAtRepOffset - nRepOffset))
                            pInWindowAtRepOffset += 4;
                         while (pInWindowAtRepOffset < pInWindowMax && pInWindowAtRepOffset[0] == pInWindowAtRepOffset[-nRepOffset])
                            pInWindowAtRepOffset++;
@@ -825,9 +843,9 @@ static int apultra_reduce_commands(apultra_compressor *pCompressor, const unsign
                         (pBestMatch[nNextIndex].offset < MINMATCH4_OFFSET || pMatch->length >= 4)) {
                         int nMaxLen = 0;
                         const unsigned char* pInWindowAtPos = pInWindow + i;
-                        while ((nMaxLen + 8) < pMatch->length && !memcmp(pInWindowAtPos + nMaxLen - pBestMatch[nNextIndex].offset, pInWindowAtPos + nMaxLen, 8))
+                        while ((nMaxLen + 8) < pMatch->length && apultra_cmp8(pInWindowAtPos + nMaxLen - pBestMatch[nNextIndex].offset, pInWindowAtPos + nMaxLen))
                            nMaxLen += 8;
-                        while ((nMaxLen + 4) < pMatch->length && !memcmp(pInWindowAtPos + nMaxLen - pBestMatch[nNextIndex].offset, pInWindowAtPos + nMaxLen, 4))
+                        while ((nMaxLen + 4) < pMatch->length && apultra_cmp4(pInWindowAtPos + nMaxLen - pBestMatch[nNextIndex].offset, pInWindowAtPos + nMaxLen))
                            nMaxLen += 4;
                         while (nMaxLen < pMatch->length && pInWindowAtPos[nMaxLen - pBestMatch[nNextIndex].offset] == pInWindowAtPos[nMaxLen])
                            nMaxLen++;
@@ -1369,9 +1387,9 @@ static int apultra_optimize_and_write_block(apultra_compressor *pCompressor, con
 
                            if (match_depth[nExistingMatchIdx] == 0x4000) {
                               int nMatchLen = 2;
-                              while ((nMatchLen + 8) < 16 && (nPosition + nMatchLen + 8) < nEndOffset && !memcmp(pInWindow + nMatchPos + nMatchLen, pInWindow + nPosition + nMatchLen, 8))
+                              while ((nMatchLen + 8) < 16 && (nPosition + nMatchLen + 8) < nEndOffset && apultra_cmp8(pInWindow + nMatchPos + nMatchLen, pInWindow + nPosition + nMatchLen))
                                  nMatchLen += 8;
-                              while ((nMatchLen + 4) < 16 && (nPosition + nMatchLen + 4) < nEndOffset && !memcmp(pInWindow + nMatchPos + nMatchLen, pInWindow + nPosition + nMatchLen, 4))
+                              while ((nMatchLen + 4) < 16 && (nPosition + nMatchLen + 4) < nEndOffset && apultra_cmp4(pInWindow + nMatchPos + nMatchLen, pInWindow + nPosition + nMatchLen))
                                  nMatchLen += 4;
                               while (nMatchLen < 16 && (nPosition + nMatchLen) < nEndOffset && pInWindow[nMatchPos + nMatchLen] == pInWindow[nPosition + nMatchLen])
                                  nMatchLen++;
@@ -1391,7 +1409,7 @@ static int apultra_optimize_and_write_block(apultra_compressor *pCompressor, con
                         int nGotMatch = 0;
 
                         while (nForwardPos < nMaxForwardPos) {
-                           if (!memcmp(pInWindow + nForwardPos, pInWindow + nForwardPos - nMatchOffset, 2)) {
+                           if (apultra_cmp2(pInWindow + nForwardPos, pInWindow + nForwardPos - nMatchOffset)) {
                               nGotMatch = 1;
                               break;
                            }
@@ -1400,9 +1418,9 @@ static int apultra_optimize_and_write_block(apultra_compressor *pCompressor, con
 
                         if (nGotMatch) {
                            int nMatchLen = 2;
-                           while ((nMatchLen + 8) < 16 && (nPosition + nMatchLen + 8) < nEndOffset && !memcmp(pInWindow + nMatchPos + nMatchLen, pInWindow + nPosition + nMatchLen, 8))
+                           while ((nMatchLen + 8) < 16 && (nPosition + nMatchLen + 8) < nEndOffset && apultra_cmp8(pInWindow + nMatchPos + nMatchLen, pInWindow + nPosition + nMatchLen))
                               nMatchLen += 8;
-                           while ((nMatchLen + 4) < 16 && (nPosition + nMatchLen + 4) < nEndOffset && !memcmp(pInWindow + nMatchPos + nMatchLen, pInWindow + nPosition + nMatchLen, 4))
+                           while ((nMatchLen + 4) < 16 && (nPosition + nMatchLen + 4) < nEndOffset && apultra_cmp4(pInWindow + nMatchPos + nMatchLen, pInWindow + nPosition + nMatchLen))
                               nMatchLen += 4;
                            while (nMatchLen < 16 && (nPosition + nMatchLen) < nEndOffset && pInWindow[nMatchPos + nMatchLen] == pInWindow[nPosition + nMatchLen])
                               nMatchLen++;

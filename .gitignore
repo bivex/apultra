@@ -1,4 +1,7 @@
 # .gitignore
 
 apultra
+apultra_prof
+apultra_prof.dSYM/
 libapultra.a
+obj/
