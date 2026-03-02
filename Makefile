@@ -1,6 +1,6 @@
 CC=clang
 AR=ar
-CFLAGS=-O3 -g -fomit-frame-pointer -Isrc/libdivsufsort/include -Isrc
+CFLAGS=-O3 -g -fomit-frame-pointer -march=native -Isrc/libdivsufsort/include -Isrc
 OBJDIR=obj
 LDFLAGS=-L. -lapultra
 
@@ -30,6 +30,15 @@ $(LIB): $(LIBOBJS)
 	$(AR) rcs $(LIB) $(LIBOBJS)
 
 libs: $(LIB)
+
+# ARM64 decompressor (Apple Silicon)
+ARM64_OBJ := $(OBJDIR)/asm/ARM64/aplib_arm64.o
+
+$(ARM64_OBJ): asm/ARM64/aplib_arm64.s
+	@mkdir -p '$(@D)'
+	as -arch arm64 $< -o $@
+
+arm64: $(ARM64_OBJ)
 
 clean:
 	@rm -rf $(APP) $(OBJDIR)
