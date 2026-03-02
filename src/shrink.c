@@ -56,6 +56,9 @@ static inline int apultra_cmp8(const unsigned char *a, const unsigned char *b) {
 #include "shrink.h"
 #include "format.h"
 
+/* Score is a 7-bit tiebreaker field; cap before storing to avoid truncation artifacts */
+#define STORE_SCORE(dst, val) ((dst) = (unsigned int)((val) < 127 ? (val) : 127))
+
 #define TOKEN_CODE_LARGE_MATCH   2 /* 10 */
 #define TOKEN_SIZE_LARGE_MATCH   2
 
@@ -412,7 +415,7 @@ static void apultra_optimize_forward(apultra_compressor *pCompressor, const unsi
                         pDestArrival->short_offset = nShortOffset;
                         pDestArrival->rep_pos = cur_arrival[j].rep_pos;
                         pDestArrival->match_len = nShortLen;
-                        pDestArrival->score = nScore;
+                        STORE_SCORE(pDestArrival->score, nScore);
                      }
                   }
                }
@@ -431,7 +434,7 @@ static void apultra_optimize_forward(apultra_compressor *pCompressor, const unsi
             pDestArrival->short_offset = nShortOffset;
             pDestArrival->rep_pos = cur_arrival[j].rep_pos;
             pDestArrival->match_len = nShortLen;
-            pDestArrival->score = cur_arrival[j].score + nLiteralScore;
+            STORE_SCORE(pDestArrival->score, cur_arrival[j].score + nLiteralScore);
          }
       }
 
@@ -628,7 +631,7 @@ static void apultra_optimize_forward(apultra_compressor *pCompressor, const unsi
                                              pDestArrival->short_offset = 0;
                                              pDestArrival->rep_pos = i;
                                              pDestArrival->match_len = k;
-                                             pDestArrival->score = nScore;
+                                             STORE_SCORE(pDestArrival->score, nScore);
                                           }
                                        }
                                     }
@@ -724,7 +727,7 @@ static void apultra_optimize_forward(apultra_compressor *pCompressor, const unsi
                                        pDestArrival->short_offset = 0;
                                        pDestArrival->rep_pos = i;
                                        pDestArrival->match_len = k;
-                                       pDestArrival->score = nScore;
+                                       STORE_SCORE(pDestArrival->score, nScore);
                                     }
                                  }
                               }

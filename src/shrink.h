@@ -23,7 +23,7 @@
 /*
  * Uses the libdivsufsort library Copyright (c) 2003-2008 Yuta Mori
  *
- * Inspired by cap by Sven-Åke Dahl. https://github.com/svendahl/cap
+ * Inspired by cap by Sven-ï¿½ke Dahl. https://github.com/svendahl/cap
  * Also inspired by Charles Bloom's compression blog. http://cbloomrants.blogspot.com/
  * With ideas from LZ4 by Yann Collet. https://github.com/lz4/lz4
  * With help and support from spke <zxintrospec@gmail.com>
@@ -80,10 +80,9 @@ typedef struct _apultra_arrival {
 
    unsigned int rep_offset:21;
    unsigned int short_offset:4;
+   unsigned int score:7;          /* fills the 7 spare bits of this 32-bit unit (21+4+7=32) */
    unsigned int rep_pos:21;
    unsigned int match_len:11;
-
-   int score;
 } apultra_arrival;
 
 /** Visited match */
