@@ -17,6 +17,40 @@ apultra is written in portable C. It is fully open-source under a liberal licens
 
 The output is fully compatible with the original [aPLib](http://ibsensoftware.com/products_aPLib.html) by Jørgen Ibsen.
 
+
+Decompression Performance
+--------------------------
+
+apultra includes both an optimized portable C decompressor (`src/expand.c`) and a highly optimized native **ARM64 assembly decompressor** (`asm/ARM64/aplib_arm64.s`) for Apple Silicon and AArch64 systems.
+
+Features of the ARM64 implementation:
+* Multi-byte copy engine: 16-byte pairs (`ldp`/`stp`) and 8-byte transfers (`ldr`/`str`) for long matches
+* Broadcasted SIMD engine for high-speed RLE (`offset == 1`)
+* Branchless 0..7 byte tail copies
+* Streamlined bitstream reader and branch-free gamma2 bit decoding
+* Inlined hot paths to minimize call/ret overhead
+
+### Benchmark (Apple Silicon ARM64)
+
+| Dataset / File | Uncompressed | Ratio | C Decompressor | ARM64 Assembly |
+| :--- | :---: | :---: | :---: | :---: |
+| **`divsufsort.c`** | 12.1 KB | 29.8% | 1,204 MB/s | 1,028 MB/s |
+| **`apultra.c`** | 41.2 KB | 15.7% | 2,143 MB/s | 1,932 MB/s |
+| **`shrink.c`** | 94.3 KB | 14.3% | 2,014 MB/s | 1,865 MB/s |
+| **Synthetic (256 KB)** | 256.0 KB | 0.6% | 19,996 MB/s | **27,583 MB/s** |
+| **Synthetic RLE (1 MB)** | 1,024.0 KB | 0.1% | 25,815 MB/s | **43,521 MB/s** |
+
+### Using the ARM64 Decompressor
+
+Function prototype:
+```c
+size_t apl_decompress(const unsigned char *src, unsigned char *dest);
+```
+Assembling with GNU `as` or Apple `clang`:
+```sh
+as -arch arm64 asm/ARM64/aplib_arm64.s -o aplib_arm64.o
+```
+
 Inspirations:
 
  * [cap](https://github.com/svendahl/cap) by Sven-Åke Dahl. 
