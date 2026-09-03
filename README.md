@@ -1,38 +1,84 @@
-apultra -- a new, opensource optimal compressor for the aPLib format
-====================================================================
+# apultra
 
-apultra is a command-line tool and a library that compresses bitstreams in the aPLib format. 
+[![License: Zlib](https://img.shields.io/badge/License-Zlib-blue.svg)](https://opensource.org/licenses/Zlib)
+[![Language: C99](https://img.shields.io/badge/Language-C99-00599C.svg)](https://en.wikipedia.org/wiki/C99)
+[![Assembly: ARM64](https://img.shields.io/badge/Assembly-ARM64%20%2F%20AArch64-red.svg)](asm/ARM64/)
+[![Format: aPLib](https://img.shields.io/badge/Format-aPLib%20Compatible-green.svg)](http://ibsensoftware.com/products_aPLib.html)
+[![Platform: Cross-Platform](https://img.shields.io/badge/Platform-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey.svg)]()
 
-The tool produces files that are 5 to 7% smaller on average than appack, the aPLib compressor. Unlike the similar [cap](https://github.com/svendahl/cap) compressor, apultra can compress files larger than 64K.
+> **apultra** is a state-of-the-art, optimal open-source compressor and high-performance decompressor for the **aPLib** format, written in portable C with hand-tuned **ARM64 assembly** acceleration.
 
-apultra is written in portable C. It is fully open-source under a liberal license. You can continue to use the regular aPLib decompression libraries for your target environment. You can do whatever you like with it.
+---
 
-    Example compression with vmlinux-5.3.0-1-amd64
+## Highlights
 
-    original       27923676 (100,00%)
-    appack         7370129 (26,39%)
-    gzip 1.8       7166179 (25,66%)
-    apultra 1.4.1  6910729 (24,75%)
+* **Superior Compression:** Produces files **5% to 7% smaller** on average than `appack` (the original aPLib compressor), beating `gzip -9` while preserving aPLib's tiny depacker footprint.
+* **No File Size Limitations:** Compresses arbitrary-sized files (unlike older 64 KB-limited tools like `cap`).
+* **100% Format Compatibility:** Decompresses cleanly with any standard aPLib depacker on any target architecture (x86, 68000, Z80, 6502, ARM, etc.).
+* **Blazing-Fast Decompression:**
+  * Portable C decompressor: **1.2 – 2.1 GB/s** on real-world data, up to **25 GB/s** on repetitive streams.
+  * Native ARM64 assembly decompressor (`aplib_arm64.s`): **1.0 – 1.9 GB/s** on real-world code, reaching **43.5 GB/s** on Apple Silicon via 16-byte `ldp`/`stp` chunking and SIMD RLE broadcast.
+* **Configurable Speed Modes:** From optimal brute-force parsing to **~7.5x faster** compression with minimal ratio loss (<0.1%).
 
+---
 
-The output is fully compatible with the original [aPLib](http://ibsensoftware.com/products_aPLib.html) by Jørgen Ibsen.
+## Compression Ratio
 
+Compression comparison on `vmlinux-5.3.0-1-amd64`:
 
-Decompression Performance
---------------------------
+| Compressor | Compressed Size (bytes) | Ratio vs Original |
+| :--- | :---: | :---: |
+| **Original** | 27,923,676 | 100.00% |
+| **`appack`** (official aPLib) | 7,370,129 | 26.39% |
+| **`gzip 1.8 -9`** | 7,166,179 | 25.66% |
+| **`apultra`** | **6,910,729** | **24.75%** |
 
-apultra includes both an optimized portable C decompressor (`src/expand.c`) and a highly optimized native **ARM64 assembly decompressor** (`asm/ARM64/aplib_arm64.s`) for Apple Silicon and AArch64 systems.
+> [!NOTE]
+> `apultra` outperforms `gzip` while generating a bitstream that can be unpacked by an assembly decompressor as small as **169 bytes** on retro architectures!
 
-Features of the ARM64 implementation:
-* Multi-byte copy engine: 16-byte pairs (`ldp`/`stp`) and 8-byte transfers (`ldr`/`str`) for long matches
-* Broadcasted SIMD engine for high-speed RLE (`offset == 1`)
-* Branchless 0..7 byte tail copies
-* Streamlined bitstream reader and branch-free gamma2 bit decoding
-* Inlined hot paths to minimize call/ret overhead
+---
 
-### Benchmark (Apple Silicon ARM64)
+## Compression Speed Modes
 
-| Dataset / File | Uncompressed | Ratio | C Decompressor | ARM64 Assembly |
+`apultra` supports multiple compression profiles via CLI flags and API parameters:
+
+| CLI Flag | API Flag | Arrivals / Pos | Passes | Relative Speed | Size Impact | Best For |
+| :--- | :--- | :---: | :---: | :---: | :---: | :--- |
+| *(default)* / `-9` | `0` | 62 | 2 | **1.0x** (baseline) | **Optimal** | Release builds, ROMs, demoscene |
+| `-f` / `-fast` | `APULTRA_FLAG_FAST` | 9 | 1 | **~5.0x faster** | +0.06% (+8 B / 14 KB) | Fast iterations, CI builds |
+| `-ff` / `-faster` / `-1` | `APULTRA_FLAG_FASTER` | 4 | 1 | **~7.5x faster** | +0.10% (+14 B / 14 KB) | Real-time tools, fast packing |
+
+### Benchmark on `src/shrink.c` (96 KB)
+
+```sh
+$ apultra -cbench src/shrink.c /dev/null
+Ultra (default):  13,869 bytes  |  754 ms  (0.12 MB/s)  |  1.00x baseline
+
+$ apultra -fast -cbench src/shrink.c /dev/null
+Fast (-fast):     13,875 bytes  |  158 ms  (0.58 MB/s)  |  4.78x faster  (+6 bytes)
+
+$ apultra -faster -cbench src/shrink.c /dev/null
+Faster (-faster): 13,883 bytes  |  101 ms  (0.91 MB/s)  |  7.44x faster  (+14 bytes)
+```
+
+---
+
+## Decompression Performance
+
+`apultra` provides two decompressors:
+1. **Portable C (`src/expand.c`):** Clean C99 with unaligned 64-bit/128-bit match copies, branch probability hints, and `memset` fast paths.
+2. **Native ARM64 Assembly (`asm/ARM64/aplib_arm64.s`):** Hand-optimized for Apple Silicon (M1/M2/M3/M4) and AArch64 systems.
+
+### Features of the ARM64 Decompressor
+* **Multi-byte copy engine:** 16-byte pairs (`ldp`/`stp`) and 8-byte quadwords (`ldr`/`str`) for long matches.
+* **SIMD Broadcast RLE:** Single-instruction byte duplication into 64-bit/128-bit vector registers for high-speed RLE (`offset == 1`).
+* **Branchless tails:** 0..7 byte residue copied via branchless `tbz` instruction cascades.
+* **Fast bitstream reader:** Minimized memory accesses with branch-free gamma2 bit decoding.
+* **Fully inlined hot paths:** Zero function call/return overhead across token loops.
+
+### Apple Silicon Benchmark
+
+| Test Dataset / File | Uncompressed | Ratio | C (`expand.c`) | ARM64 (`aplib_arm64.s`) |
 | :--- | :---: | :---: | :---: | :---: |
 | **`divsufsort.c`** | 12.1 KB | 29.8% | 1,204 MB/s | 1,028 MB/s |
 | **`apultra.c`** | 41.2 KB | 15.7% | 2,143 MB/s | 1,932 MB/s |
@@ -40,65 +86,161 @@ Features of the ARM64 implementation:
 | **Synthetic (256 KB)** | 256.0 KB | 0.6% | 19,996 MB/s | **27,583 MB/s** |
 | **Synthetic RLE (1 MB)** | 1,024.0 KB | 0.1% | 25,815 MB/s | **43,521 MB/s** |
 
-### Using the ARM64 Decompressor
+---
 
-Function prototype:
-```c
-size_t apl_decompress(const unsigned char *src, unsigned char *dest);
-```
-Assembling with GNU `as` or Apple `clang`:
+## Building
+
+### Prerequisites
+* Standard C compiler (`clang`, `gcc`, or MSVC)
+* `make` (or Visual Studio on Windows)
+
+### Build with Make (macOS / Linux)
+
 ```sh
+# Build CLI tool and libapultra.a
+make
+
+# Run automated verification suite
+./apultra -quicktest
+```
+
+### Assembling ARM64 Decompressor
+
+```sh
+# macOS (Apple Silicon)
 as -arch arm64 asm/ARM64/aplib_arm64.s -o aplib_arm64.o
+
+# Linux AArch64
+as asm/ARM64/aplib_arm64.s -o aplib_arm64.o
 ```
 
+---
 
-Compression Levels and Speed Modes
------------------------------------
+## CLI Usage
 
-`apultra` supports multiple compression trade-offs via CLI flags and library API flags:
+```text
+apultra [-c] [-d] [-v] [-b] [-f|-ff] [-w <size>] [-D <dict>] <infile> <outfile>
+```
 
-| Flag / API | Mode | Arrivals / Pos | Passes | Speed | Ratio Impact |
-| :--- | :--- | :---: | :---: | :---: | :---: |
-| *(default)* / `-9` | **Ultra** | 62 | 2 | 1.0x (baseline) | **Best possible** |
-| `-f` / `-fast` / `APULTRA_FLAG_FAST` | **Fast** | 9 | 1 | **~5x faster** | +0.06% size |
-| `-ff` / `-faster` / `-1` / `APULTRA_FLAG_FASTER` | **Fastest** | 4 | 1 | **~7.5x faster** | +0.10% size |
+### Options
 
-Example usage:
+| Option | Description |
+| :--- | :--- |
+| `<infile> <outfile>` | Input file and output destination paths |
+| `-d` | Decompress (default: compress) |
+| `-c` | Verify compressed stream immediately after compression |
+| `-f`, `-fast` | Fast compression mode (~5x faster, 9 arrivals) |
+| `-ff`, `-faster`, `-1` | Fastest compression mode (~7.5x faster, 4 arrivals) |
+| `-9` | Maximum compression (default optimal mode) |
+| `-b` | Backwards compression / decompression |
+| `-w <size>` | Maximum window size in bytes (16..2097152, default: 2 MB) |
+| `-D <file>` | Use external dictionary file |
+| `-stats` | Show detailed compression token breakdown |
+| `-v` | Verbose progress and timing information |
+| `-cbench` | Benchmark compression in memory |
+| `-dbench` | Benchmark decompression in memory |
+| `-test` | Run full automated test suite |
+| `-quicktest` | Run quick automated test suite |
+
+### Examples
+
 ```sh
-# Maximum compression (default optimal)
+# Compress with maximum ratio (default)
 apultra input.bin output.ap
 
-# Fast compression (~5x faster, virtually identical size)
-apultra -fast input.bin output.ap
+# Compress with fast mode (~5x faster) and verify
+apultra -fast -c input.bin output.ap
 
-# Fastest compression (~7.5x faster)
-apultra -faster input.bin output.ap
+# Decompress a file
+apultra -d output.ap restored.bin
+
+# In-memory compression benchmark
+apultra -cbench input.bin /dev/null
 ```
 
-Inspirations:
+---
 
- * [cap](https://github.com/svendahl/cap) by Sven-Åke Dahl. 
- * [Charles Bloom](http://cbloomrants.blogspot.com/)'s compression blog. 
- * [LZ4](https://github.com/lz4/lz4) by Yann Collet. 
- * spke for help and support
+## Library API
 
-Some projects that use apultra for compression:
- * [Hyperdrive](https://www.usebox.net/jjm/hyperdrive/), a new, excellent shoot'em up for the Amstrad CPC 464/6128/GX4000, in cartridge format, by usebox.net.
- * [Brick Rick](https://www.usebox.net/jjm/brick-rick/), a new game for the Amstrad CPC 464/6128 by usebox.net. A physical copy can be ordered from [Polyplay](https://www.polyplay.xyz/navi.php?suche=Brick+Rick&lang=eng)
- * [Brick Rick: Graveyard Shift](https://www.usebox.net/jjm/graveyard-shift/), a similar new game for the ZX Spectrum 128K by usebox.net. Get it on tape from [TFW8b.com](https://www.thefuturewas8bit.com/cas019.html)
- * [Kitsune's Curse](https://www.usebox.net/jjm/kitsunes-curse/), another new title for the CPC line by usebox.net.
- * [Sgt. Helmet's Training Day](https://www.mojontwins.com/juegos_mojonos/sgt-helmet-training-day-2020-cpc/), a new game for the Amstrad CPC by the Mojon Twins (using their MK1 engine).
- * [Prince Dastan - Sokoban Within](https://www.pouet.net/prod.php?which=87382), a CPCRetroDev 2020 game for the Amstrad CPC by Euphoria Design 
- * [Petris](https://github.com/bbbbbr/Petris), a homebrew game for the Gameboy.
- * [Mr Palot](https://github.com/graelx/mrpalot), a ZX Spectrum game made with the Mojon Twins MK1 engine.
- * [rasm](https://github.com/EdouardBERGE/rasm), a popular Z80 assembler, features built-in support for apultra-compressed data sections.
+Add `libapultra.h` to your project and link with `libapultra.a`.
 
-Also of interest:
- * [oapack](https://gitlab.com/eugene77/oapack) by Eugene Larchenko, a brute-force (exhaustive) optimal packer for the aPLib format. 
- * [Streamed 8088 decompressor](https://hg.ulukai.org/ecm/inicomp/file/4c6ae7774f3a/apl.asm) for aPLib by C. Masloch
- * [Gameboy decompressor](https://github.com/untoxa/UnaPACK.GBZ80) by untoxa
+### Compression Example
 
-License:
+```c
+#include <stdio.h>
+#include <stdlib.h>
+#include "libapultra.h"
 
-* The apultra code is available under the Zlib license.
-* The match finder (matchfinder.c) is available under the CC0 license due to using portions of code from Eric Bigger's Wimlib in the suffix array-based matchfinder.
+void compress_buffer(const unsigned char *src, size_t src_size) {
+    size_t max_out = apultra_get_max_compressed_size(src_size);
+    unsigned char *dst = malloc(max_out);
+
+    // Pass APULTRA_FLAG_FAST, APULTRA_FLAG_FASTER, or 0 (optimal)
+    size_t comp_size = apultra_compress(src, dst, src_size, max_out,
+                                        0 /* nFlags */, 0 /* window */, 0 /* dict */,
+                                        NULL /* progress */, NULL /* stats */);
+
+    printf("Compressed %zu -> %zu bytes\n", src_size, comp_size);
+    free(dst);
+}
+```
+
+### Decompression Example
+
+#### In C (`src/expand.c`):
+```c
+#include "libapultra.h"
+
+size_t max_dec = apultra_get_max_decompressed_size(comp_data, comp_size, 0);
+unsigned char *out = malloc(max_dec);
+size_t orig_size = apultra_decompress(comp_data, out, comp_size, max_dec, 0, 0);
+```
+
+#### In ARM64 Assembly (`asm/ARM64/aplib_arm64.s`):
+```c
+extern size_t apl_decompress(const unsigned char *src, unsigned char *dest);
+
+size_t orig_size = apl_decompress(comp_data, dest_buffer);
+```
+
+---
+
+## Projects Using apultra
+
+* [Hyperdrive](https://www.usebox.net/jjm/hyperdrive/) – Shoot'em up for Amstrad CPC 464/6128/GX4000 by usebox.net
+* [Brick Rick](https://www.usebox.net/jjm/brick-rick/) – Game for Amstrad CPC 464/6128 by usebox.net ([Polyplay](https://www.polyplay.xyz/navi.php?suche=Brick+Rick&lang=eng))
+* [Brick Rick: Graveyard Shift](https://www.usebox.net/jjm/graveyard-shift/) – ZX Spectrum 128K game ([TFW8b.com](https://www.thefuturewas8bit.com/cas019.html))
+* [Kitsune's Curse](https://www.usebox.net/jjm/kitsunes-curse/) – Retro title for the CPC line by usebox.net
+* [Sgt. Helmet's Training Day](https://www.mojontwins.com/juegos_mojonos/sgt-helmet-training-day-2020-cpc/) – Amstrad CPC game by Mojon Twins (MK1 engine)
+* [Prince Dastan - Sokoban Within](https://www.pouet.net/prod.php?which=87382) – CPCRetroDev 2020 game by Euphoria Design
+* [Petris](https://github.com/bbbbbr/Petris) – Homebrew game for Nintendo Game Boy
+* [Mr Palot](https://github.com/graelx/mrpalot) – ZX Spectrum game (Mojon Twins MK1 engine)
+* [rasm](https://github.com/EdouardBERGE/rasm) – Popular Z80 assembler with built-in `apultra` compressed data sections
+* [doskrunch](https://github.com/pacnpal/doskrunch) – Multi-tier DOS executable packer and SFX compressor
+* [libdragon](https://github.com/DragonMinded/libdragon) – Modern SDK for Nintendo 64 homebrew development
+
+---
+
+## Related Projects & Depackers
+
+* [cap](https://github.com/svendahl/cap) by Sven-Åke Dahl – aPLib compressor for Commodore 64 / 128
+* [oapack](https://gitlab.com/eugene77/oapack) by Eugene Larchenko – Brute-force DP packer for aPLib
+* [Streamed 8088 decompressor](https://hg.ulukai.org/ecm/inicomp/file/4c6ae7774f3a/apl.asm) by C. Masloch
+* [Game Boy decompressor](https://github.com/untoxa/UnaPACK.GBZ80) by untoxa
+* [Original aPLib SDK](http://ibsensoftware.com/products_aPLib.html) by Jørgen Ibsen
+
+---
+
+## Inspirations & Credits
+
+* [cap](https://github.com/svendahl/cap) by Sven-Åke Dahl
+* [Charles Bloom](http://cbloomrants.blogspot.com/)'s compression blog
+* [LZ4](https://github.com/lz4/lz4) by Yann Collet
+* **spke** for testing, insights, and support
+
+---
+
+## License
+
+* **apultra** source code is licensed under the [Zlib License](LICENSE).
+* The match finder (`matchfinder.c`) is under the **CC0 License** due to portions adapted from Eric Biggers' [wimlib](https://wimlib.net/).
