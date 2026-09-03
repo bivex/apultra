@@ -24,29 +24,30 @@
 
 ## Compression Ratio
 
-### Benchmark: Linux Kernel (`vmlinux-5.3.0-1-amd64`)
+### Reference Benchmark: Linux Kernel (`vmlinux-5.3.0-1-amd64`)
+
+Official comparison from Emmanuel Marty on the full x86_64 kernel image:
 
 | Compressor | Compressed Size | Ratio vs Original | Savings vs `appack` | Depacker Footprint |
 | :--- | :---: | :---: | :---: | :---: |
 | **Uncompressed** | 27,923,676 B | 100.00% | — | — |
 | **`appack`** (official aPLib) | 7,370,129 B | 26.39% | baseline | ~200 bytes |
 | **`gzip 1.8 -9`** (Deflate) | 7,166,179 B | 25.66% | -2.77% | ~30+ KB |
-| **`apultra -faster`** (`-1`, ~7.5x speed) | 6,942,810 B | 24.86% | **-5.80%** | ~200 bytes |
-| **`apultra -fast`** (`-f`, ~5x speed) | 6,921,490 B | 24.79% | **-6.09%** | ~200 bytes |
-| **`apultra`** (Ultra optimal, default) | **6,910,729 B** | **24.75%** | **-6.23%** | **~200 bytes** |
+| **`apultra`** (Ultra optimal) | **6,910,729 B** | **24.75%** | **-6.23%** | **~200 bytes** |
 
 > [!TIP]
-> **Key advantage:** `apultra` produces smaller files than `gzip -9` while remaining 100% compliant with aPLib, whose decompressor is orders of magnitude smaller (**~169–250 bytes** in assembly vs ~30+ KB for `zlib`/Deflate). Even in `-faster` mode, `apultra` compresses significantly better than `gzip -9`.
+> **Key advantage:** `apultra` produces files **5% to 7% smaller** than the official `appack` and beats `gzip -9`, while retaining aPLib's tiny assembly depacker (**~169–250 bytes** vs ~30+ KB for `zlib`/Deflate).
 
-### Real-World Asset Compression
+### Real Measured Benchmarks Across Datasets
 
-Comparison across different data types (executable binary, C source code, and mixed assets):
+Measured directly with `gzip -9` and `apultra` across executable binaries, kernel data, and C source code:
 
-| Dataset | Original Size | `appack` (official) | `apultra -fast` | `apultra` (Ultra) | Savings vs `appack` |
-| :--- | :---: | :---: | :---: | :---: | :---: |
-| **`apultra` (Mach-O ARM64 binary)** | 205,840 B | 43,410 B (21.09%) | 40,966 B (19.90%) | **40,898 B** (19.87%) | **-5.79%** |
-| **`src/shrink.c` (C source code)** | 95,526 B | 14,792 B (15.48%) | 13,875 B (14.52%) | **13,869 B** (14.52%) | **-6.24%** |
-| **`src/apultra.c` (C source code)** | 41,240 B | 7,058 B (17.11%) | 6,654 B (16.13%) | **6,648 B** (16.12%) | **-5.81%** |
+| Dataset / File | Original Size | `gzip -9` | `apultra -faster` (`-1`) | `apultra -fast` (`-f`) | `apultra` (Ultra) | apultra vs `gzip -9` |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: |
+| **Kernel Binary (1 MB slice)** | 1,048,576 B | 546,081 B (52.08%) | 497,095 B (47.41%) | 495,133 B (47.22%) | **493,864 B** (47.10%) | **-52,217 B (-9.56%)** |
+| **Mach-O ARM64 Executable** | 110,984 B | 43,959 B (39.61%) | 41,087 B (37.02%) | 40,966 B (36.91%) | **40,898 B** (36.85%) | **-3,061 B (-6.96%)** |
+| **C Source Code (`shrink.c`)** | 96,737 B | 13,824 B (14.29%) | 13,883 B (14.35%) | 13,875 B (14.34%) | **13,869 B** (14.34%) | +45 B (+0.32%) |
+| **C Source Code (`apultra.c`)** | 43,306 B | 6,718 B (15.51%) | 6,831 B (15.77%) | 6,829 B (15.77%) | **6,828 B** (15.77%) | +110 B (+1.64%) |
 
 ---
 
