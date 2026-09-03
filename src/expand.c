@@ -38,16 +38,20 @@
 
 #ifdef _MSC_VER
 #define FORCE_INLINE __forceinline
+#define LIKELY(x) (x)
+#define UNLIKELY(x) (x)
 #else /* _MSC_VER */
 #define FORCE_INLINE __attribute__((always_inline))
+#define LIKELY(x) __builtin_expect(!!(x), 1)
+#define UNLIKELY(x) __builtin_expect(!!(x), 0)
 #endif /* _MSC_VER */
 
 static inline FORCE_INLINE int apultra_read_bit(const unsigned char **ppInBlock, const unsigned char *pDataEnd, int *nCurBitMask, unsigned char *bits) {
    const unsigned char *pInBlock = *ppInBlock;
    int nBit;
 
-   if ((*nCurBitMask) == 0) {
-      if (pInBlock >= pDataEnd) return -1;
+   if (UNLIKELY((*nCurBitMask) == 0)) {
+      if (UNLIKELY(pInBlock >= pDataEnd)) return -1;
       (*bits) = *pInBlock++;
       (*nCurBitMask) = 128;
    }
@@ -59,6 +63,25 @@ static inline FORCE_INLINE int apultra_read_bit(const unsigned char **ppInBlock,
 
    *ppInBlock = pInBlock;
    return nBit;
+}
+
+static inline FORCE_INLINE int apultra_read_4bits(const unsigned char **ppInBlock, const unsigned char *pDataEnd, int *nCurBitMask, unsigned char *bits) {
+   if (LIKELY((*nCurBitMask) >= 16)) {
+      int val = ((*bits) >> 4) & 0x0f;
+      (*bits) <<= 4;
+      (*nCurBitMask) >>= 4;
+      return val;
+   }
+   else {
+      int val = 0;
+      int i;
+      for (i = 3; i >= 0; i--) {
+         int bit = apultra_read_bit(ppInBlock, pDataEnd, nCurBitMask, bits);
+         if (UNLIKELY(bit < 0)) return -1;
+         val |= (bit << i);
+      }
+      return val;
+   }
 }
 
 static inline FORCE_INLINE int apultra_read_gamma2(const unsigned char **ppInBlock, const unsigned char *pDataEnd, int *nCurBitMask, unsigned char *bits) {
@@ -167,17 +190,8 @@ size_t apultra_get_max_decompressed_size(const unsigned char *pInputData, const 
             }
             else {
                /* '111': 4 bit offset */
-               nResult = apultra_read_bit(&pInputData, pInputDataEnd, &nCurBitMask, &bits);
-               if (nResult < 0) return -1;
-
-               nResult = apultra_read_bit(&pInputData, pInputDataEnd, &nCurBitMask, &bits);
-               if (nResult < 0) return -1;
-
-               nResult = apultra_read_bit(&pInputData, pInputDataEnd, &nCurBitMask, &bits);
-               if (nResult < 0) return -1;
-
-               nResult = apultra_read_bit(&pInputData, pInputDataEnd, &nCurBitMask, &bits);
-               if (nResult < 0) return -1;
+               if (UNLIKELY(apultra_read_4bits(&pInputData, pInputDataEnd, &nCurBitMask, &bits) < 0))
+                  return -1;
 
                nFollowsLiteral = 3;
                nDecompressedSize++;
@@ -259,8 +273,12 @@ size_t apultra_decompress(const unsigned char *pInputData, unsigned char *pOutDa
 
             nFollowsLiteral = 2;
             const unsigned char *pSrc = pCurOutData - nMatchOffset;
-            if (pSrc >= pOutData && (pSrc + nMatchLen) <= pOutDataEnd) {
-               if (nMatchLen < 11 && nMatchOffset >= 8 && pCurOutData < pOutDataFastEnd) {
+            if (LIKELY(pSrc >= pOutData && (pCurOutData + nMatchLen) <= pOutDataEnd)) {
+               if (nMatchOffset == 1) {
+                  memset(pCurOutData, *pSrc, nMatchLen);
+                  pCurOutData += nMatchLen;
+               }
+               else if (nMatchLen < 11 && nMatchOffset >= 8 && pCurOutData < pOutDataFastEnd) {
                   memcpy(pCurOutData, pSrc, 8);
                   memcpy(pCurOutData + 8, pSrc + 8, 2);
                   pCurOutData += nMatchLen;
@@ -319,8 +337,12 @@ size_t apultra_decompress(const unsigned char *pInputData, unsigned char *pOutDa
 
                nFollowsLiteral = 2;
                const unsigned char *pSrc = pCurOutData - nMatchOffset;
-               if (pSrc >= pOutData && (pSrc + nMatchLen) <= pOutDataEnd) {
-                  if (nMatchOffset >= 8 && pCurOutData < pOutDataFastEnd) {
+               if (LIKELY(pSrc >= pOutData && (pCurOutData + nMatchLen) <= pOutDataEnd)) {
+                  if (nMatchOffset == 1) {
+                     memset(pCurOutData, *pSrc, nMatchLen);
+                     pCurOutData += nMatchLen;
+                  }
+                  else if (nMatchOffset >= 8 && pCurOutData < pOutDataFastEnd) {
                      memcpy(pCurOutData, pSrc, 8);
                      memcpy(pCurOutData + 8, pSrc + 8, 2);
                      pCurOutData += nMatchLen;
@@ -345,21 +367,9 @@ size_t apultra_decompress(const unsigned char *pInputData, unsigned char *pOutDa
                unsigned int nShortMatchOffset;
 
                /* '111': 4 bit offset */
-               nResult = apultra_read_bit(&pInputData, pInputDataEnd, &nCurBitMask, &bits);
-               if (nResult < 0) return -1;
-               nShortMatchOffset = nResult << 3;
-
-               nResult = apultra_read_bit(&pInputData, pInputDataEnd, &nCurBitMask, &bits);
-               if (nResult < 0) return -1;
-               nShortMatchOffset |= nResult << 2;
-
-               nResult = apultra_read_bit(&pInputData, pInputDataEnd, &nCurBitMask, &bits);
-               if (nResult < 0) return -1;
-               nShortMatchOffset |= nResult << 1;
-
-               nResult = apultra_read_bit(&pInputData, pInputDataEnd, &nCurBitMask, &bits);
-               if (nResult < 0) return -1;
-               nShortMatchOffset |= nResult << 0;
+               int n4Bits = apultra_read_4bits(&pInputData, pInputDataEnd, &nCurBitMask, &bits);
+               if (UNLIKELY(n4Bits < 0)) return -1;
+               nShortMatchOffset = (unsigned int)n4Bits;
 
                nFollowsLiteral = 3;
                if (nShortMatchOffset) {
