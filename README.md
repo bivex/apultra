@@ -24,17 +24,29 @@
 
 ## Compression Ratio
 
-Compression comparison on `vmlinux-5.3.0-1-amd64`:
+### Benchmark: Linux Kernel (`vmlinux-5.3.0-1-amd64`)
 
-| Compressor | Compressed Size (bytes) | Ratio vs Original |
-| :--- | :---: | :---: |
-| **Original** | 27,923,676 | 100.00% |
-| **`appack`** (official aPLib) | 7,370,129 | 26.39% |
-| **`gzip 1.8 -9`** | 7,166,179 | 25.66% |
-| **`apultra`** | **6,910,729** | **24.75%** |
+| Compressor | Compressed Size | Ratio vs Original | Savings vs `appack` | Depacker Footprint |
+| :--- | :---: | :---: | :---: | :---: |
+| **Uncompressed** | 27,923,676 B | 100.00% | — | — |
+| **`appack`** (official aPLib) | 7,370,129 B | 26.39% | baseline | ~200 bytes |
+| **`gzip 1.8 -9`** (Deflate) | 7,166,179 B | 25.66% | -2.77% | ~30+ KB |
+| **`apultra -faster`** (`-1`, ~7.5x speed) | 6,942,810 B | 24.86% | **-5.80%** | ~200 bytes |
+| **`apultra -fast`** (`-f`, ~5x speed) | 6,921,490 B | 24.79% | **-6.09%** | ~200 bytes |
+| **`apultra`** (Ultra optimal, default) | **6,910,729 B** | **24.75%** | **-6.23%** | **~200 bytes** |
 
-> [!NOTE]
-> `apultra` outperforms `gzip` while generating a bitstream that can be unpacked by an assembly decompressor as small as **169 bytes** on retro architectures!
+> [!TIP]
+> **Key advantage:** `apultra` produces smaller files than `gzip -9` while remaining 100% compliant with aPLib, whose decompressor is orders of magnitude smaller (**~169–250 bytes** in assembly vs ~30+ KB for `zlib`/Deflate). Even in `-faster` mode, `apultra` compresses significantly better than `gzip -9`.
+
+### Real-World Asset Compression
+
+Comparison across different data types (executable binary, C source code, and mixed assets):
+
+| Dataset | Original Size | `appack` (official) | `apultra -fast` | `apultra` (Ultra) | Savings vs `appack` |
+| :--- | :---: | :---: | :---: | :---: | :---: |
+| **`apultra` (Mach-O ARM64 binary)** | 205,840 B | 43,410 B (21.09%) | 40,966 B (19.90%) | **40,898 B** (19.87%) | **-5.79%** |
+| **`src/shrink.c` (C source code)** | 95,526 B | 14,792 B (15.48%) | 13,875 B (14.52%) | **13,869 B** (14.52%) | **-6.24%** |
+| **`src/apultra.c` (C source code)** | 41,240 B | 7,058 B (17.11%) | 6,654 B (16.13%) | **6,648 B** (16.12%) | **-5.81%** |
 
 ---
 
