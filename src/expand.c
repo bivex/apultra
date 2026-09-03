@@ -278,9 +278,9 @@ size_t apultra_decompress(const unsigned char *pInputData, unsigned char *pOutDa
                   memset(pCurOutData, *pSrc, nMatchLen);
                   pCurOutData += nMatchLen;
                }
-               else if (nMatchLen < 11 && nMatchOffset >= 8 && pCurOutData < pOutDataFastEnd) {
+               else if (nMatchLen <= 16 && nMatchOffset >= 8 && pCurOutData < pOutDataFastEnd) {
                   memcpy(pCurOutData, pSrc, 8);
-                  memcpy(pCurOutData + 8, pSrc + 8, 2);
+                  memcpy(pCurOutData + 8, pSrc + 8, 8);
                   pCurOutData += nMatchLen;
                }
                else {
