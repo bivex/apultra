@@ -35,6 +35,18 @@
 #include "format.h"
 #include "libapultra.h"
 
+static inline int apultra_cmp4(const unsigned char *a, const unsigned char *b) {
+   uint32_t va, vb;
+   memcpy(&va, a, 4); memcpy(&vb, b, 4);
+   return va == vb;
+}
+static inline int apultra_cmp8(const unsigned char *a, const unsigned char *b) {
+   uint64_t va, vb;
+   memcpy(&va, a, 8); memcpy(&vb, b, 8);
+   return va == vb;
+}
+
+
 /**
  * Hash index into TAG_BITS
  *
@@ -84,7 +96,11 @@ int apultra_build_suffix_array(apultra_compressor *pCompressor, const unsigned c
          continue;
       }
       const int nMaxLen = (i > Phi[i]) ? (nInWindowSize - i) : (nInWindowSize - Phi[i]);
-      while (nCurLen < nMaxLen && pInWindow[i + nCurLen] == pInWindow[Phi[i] + nCurLen]) nCurLen++;
+      const unsigned char *pA = pInWindow + i;
+      const unsigned char *pB = pInWindow + Phi[i];
+      while ((nCurLen + 8) < nMaxLen && apultra_cmp8(pA + nCurLen, pB + nCurLen)) nCurLen += 8;
+      while ((nCurLen + 4) < nMaxLen && apultra_cmp4(pA + nCurLen, pB + nCurLen)) nCurLen += 4;
+      while (nCurLen < nMaxLen && pA[nCurLen] == pB[nCurLen]) nCurLen++;
       PLCP[i] = nCurLen;
       if (nCurLen > 0)
          nCurLen--;
