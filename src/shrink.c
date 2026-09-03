@@ -1760,7 +1760,11 @@ size_t apultra_compress(const unsigned char *pInputData, unsigned char *pOutBuff
    const int nBlockSize = (nInputSize < BLOCK_SIZE) ? ((nInputSize < 1024) ? 1024 : (const int)nInputSize) : BLOCK_SIZE;
    const int nMaxOutBlockSize = (const int)apultra_get_max_compressed_size(nBlockSize);
 
-   if (nDictionarySize < nInputSize) {
+   if (nFlags & APULTRA_FLAG_FASTER)
+      nMaxArrivals = NARRIVALS_PER_POSITION_VERY_SMALL;
+   else if (nFlags & APULTRA_FLAG_FAST)
+      nMaxArrivals = NARRIVALS_PER_POSITION_SMALL;
+   else if (nDictionarySize < nInputSize) {
       int nInDataSize = (int)(nInputSize - nDictionarySize);
       if (nInDataSize > nBlockSize)
          nInDataSize = nBlockSize;

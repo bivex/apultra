@@ -51,6 +51,30 @@ Assembling with GNU `as` or Apple `clang`:
 as -arch arm64 asm/ARM64/aplib_arm64.s -o aplib_arm64.o
 ```
 
+
+Compression Levels and Speed Modes
+-----------------------------------
+
+`apultra` supports multiple compression trade-offs via CLI flags and library API flags:
+
+| Flag / API | Mode | Arrivals / Pos | Passes | Speed | Ratio Impact |
+| :--- | :--- | :---: | :---: | :---: | :---: |
+| *(default)* / `-9` | **Ultra** | 62 | 2 | 1.0x (baseline) | **Best possible** |
+| `-f` / `-fast` / `APULTRA_FLAG_FAST` | **Fast** | 9 | 1 | **~5x faster** | +0.06% size |
+| `-ff` / `-faster` / `-1` / `APULTRA_FLAG_FASTER` | **Fastest** | 4 | 1 | **~7.5x faster** | +0.10% size |
+
+Example usage:
+```sh
+# Maximum compression (default optimal)
+apultra input.bin output.ap
+
+# Fast compression (~5x faster, virtually identical size)
+apultra -fast input.bin output.ap
+
+# Fastest compression (~7.5x faster)
+apultra -faster input.bin output.ap
+```
+
 Inspirations:
 
  * [cap](https://github.com/svendahl/cap) by Sven-Åke Dahl. 

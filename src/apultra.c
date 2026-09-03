@@ -44,6 +44,8 @@
 #define OPT_VERBOSE        1
 #define OPT_STATS          2
 #define OPT_BACKWARD       4
+#define OPT_FAST           8
+#define OPT_FASTER         16
 
 #define TOOL_VERSION "1.4.8"
 
@@ -197,7 +199,8 @@ static int do_compress(const char *pszInFilename, const char *pszOutFilename, co
 
    memset(pCompressedData, 0, nMaxCompressedSize);
 
-   nCompressedSize = apultra_compress(pDecompressedData, pCompressedData, nDictionarySize + nOriginalSize, nMaxCompressedSize, 0U /* nFlags */, nMaxWindowSize, nDictionarySize, compression_progress, &stats);
+   unsigned int nCompressFlags = (nOptions & OPT_FASTER) ? APULTRA_FLAG_FASTER : ((nOptions & OPT_FAST) ? APULTRA_FLAG_FAST : 0U);
+   nCompressedSize = apultra_compress(pDecompressedData, pCompressedData, nDictionarySize + nOriginalSize, nMaxCompressedSize, nCompressFlags, nMaxWindowSize, nDictionarySize, compression_progress, &stats);
 
    if (nOptions & OPT_VERBOSE) {
       nEndTime = do_get_time();
@@ -874,7 +877,8 @@ static int do_compr_benchmark(const char *pszInFilename, const char *pszOutFilen
       memset(pCompressedData + 1024 + nRightGuardPos, nGuard, 1024);
 
       long long t0 = do_get_time();
-      nActualCompressedSize = apultra_compress(pFileData, pCompressedData + 1024, nFileSize, nRightGuardPos, 0U /* nFlags */, nMaxWindowSize, 0 /* dictionary size */, NULL, NULL);
+      unsigned int nCompressFlags = (nOptions & OPT_FASTER) ? APULTRA_FLAG_FASTER : ((nOptions & OPT_FAST) ? APULTRA_FLAG_FAST : 0U);
+      nActualCompressedSize = apultra_compress(pFileData, pCompressedData + 1024, nFileSize, nRightGuardPos, nCompressFlags, nMaxWindowSize, 0 /* dictionary size */, NULL, NULL);
       long long t1 = do_get_time();
       if (nActualCompressedSize == (size_t)-1) {
          free(pCompressedData);
@@ -1163,6 +1167,23 @@ int main(int argc, char **argv) {
          else
             nArgsError = 1;
       }
+      else if (!strcmp(argv[i], "-f") || !strcmp(argv[i], "-fast")) {
+         if ((nOptions & (OPT_FAST | OPT_FASTER)) == 0) {
+            nOptions |= OPT_FAST;
+         }
+         else
+            nArgsError = 1;
+      }
+      else if (!strcmp(argv[i], "-ff") || !strcmp(argv[i], "-faster") || !strcmp(argv[i], "-1")) {
+         if ((nOptions & (OPT_FAST | OPT_FASTER)) == 0) {
+            nOptions |= OPT_FASTER;
+         }
+         else
+            nArgsError = 1;
+      }
+      else if (!strcmp(argv[i], "-9")) {
+         /* standard maximum compression mode (default) */
+      }
       else if (!strcmp(argv[i], "-b")) {
          if ((nOptions & OPT_BACKWARD) == 0) {
             nOptions |= OPT_BACKWARD;
@@ -1202,6 +1223,8 @@ int main(int argc, char **argv) {
       fprintf(stderr, "     -test: run full automated self-tests\n");
       fprintf(stderr, "-quicktest: run quick automated self-tests\n");
       fprintf(stderr, "    -stats: show compressed data stats\n");
+      fprintf(stderr, " -f, -fast: fast compression (~5x faster)\n");
+      fprintf(stderr, "-ff,-faster: fastest compression (~7.5x faster)\n");
       fprintf(stderr, "        -v: be verbose\n");
       return 100;
    }
